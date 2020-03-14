@@ -7,34 +7,33 @@ module Controller (
            input reset,
            input bubble,
 
-           output logic [4:0] regRead1,
-           output logic [4:0] regRead2,
-           output logic regRead1Required,
-           output logic regRead2Required,
+           output reg [4:0] regRead1,
+           output reg [4:0] regRead2,
+           output reg regRead1Required,
+           output reg regRead2Required,
 
-           output logic [3:0] mulCtrl,
+           output reg [3:0] mulCtrl,
            output mulEnable,
-           output logic mulOutputSel,
+           output reg mulOutputSel,
 
-           output logic memLoad,
-           output logic [1:0] memWidthCtrl,
-           output logic memReadSignExtend,
-           output logic memStore,
-           output logic branch,
-           output logic [31:0] immediate,
-           output logic [4:0] destinationRegister,
-           output logic aluSrc,
-           output logic [3:0] aluCtrl,
-           output logic [3:0] cmpCtrl,
-           output logic absJump,
-           output logic absJumpLoc, // 1 = immediate, 0 = register
-           output logic [3:0] grfWriteSource,
-           output logic checkOverflow,
-           output logic [2:0] generateException,
-           output logic writeCP0,
-           output logic [4:0] numberCP0,
-
-           output logic bye
+           output reg memLoad,
+           output reg [1:0] memWidthCtrl,
+           output reg memReadSignExtend,
+           output reg memStore,
+           output reg branch,
+           output reg [31:0] immediate,
+           output reg [4:0] destinationRegister,
+           output reg aluSrc,
+           output reg [3:0] aluCtrl,
+           output reg [3:0] cmpCtrl,
+           output reg absJump,
+           output reg absJumpLoc, // 1 = immediate, 0 = register
+           output reg [3:0] grfWriteSource,
+           output reg checkOverflow,
+           output reg [2:0] generateException,
+           output reg writeCP0,
+           output reg [4:0] numberCP0,
+           output reg bye
        );
 
 wire [5:0] opcode = instruction[31:26];
@@ -52,10 +51,7 @@ wire [31:0] signExtendedImmediate = $signed(imm);
 
 assign mulEnable = mulCtrl != `mtDisabled;
 
-localparam reg_ra = 31;
-
 localparam R = 6'b000000;
-localparam REGIMM = 6'b000001;
 localparam ori = 6'b001101;
 localparam andi = 6'b001100;
 localparam xori = 6'b001110;
@@ -65,6 +61,7 @@ localparam beq = 6'b000100;
 localparam bne = 6'b000101;
 localparam blez = 6'b000110;
 localparam bgtz = 6'b000111;
+localparam bltz_bgez = 6'b000001;
 localparam lui = 6'b001111;
 localparam jal = 6'b000011;
 localparam addiu = 6'b001001;
@@ -107,11 +104,6 @@ localparam madd = 6'b000000;
 localparam maddu = 6'b000001;
 localparam eret = 6'b011000;
 
-localparam bltz = 5'b00000;
-localparam bgez = 5'b00001;
-localparam bltzal = 5'b10000;
-localparam bgezal = 5'b10001;
-
 localparam mfc0 = 5'b00000;
 localparam mtc0 = 5'b00100;
 
@@ -122,11 +114,10 @@ localparam sltiu = 6'b001011;
 
 localparam jr = 6'b001000;
 localparam syscall = 6'b001100;
-localparam _break = 6'b001101;
 
 localparam debug = 1;
 
-always_comb begin
+always @(*) begin
     regRead1Required = 0;
     regRead2Required = 0;
     if (currentStage == `stageD) begin
@@ -207,11 +198,8 @@ end
     regRead1 = rsi; \
     regRead2 = rti;
 
-`define simpleLink \
-    grfWriteSource = `grfWritePC; \
-    destinationRegister = reg_ra;
 
-always_comb begin
+always @(*) begin
     memLoad = 0;
     memStore = 0;
     grfWriteSource = `grfWriteDisable;
@@ -285,34 +273,6 @@ always_comb begin
                 end
             endcase
         end
-
-        REGIMM: begin
-            case (rti)
-                bltzal: begin
-                    `simpleBranch
-                    `simpleLink
-                    cmpCtrl = `cmpLessThanZero;
-                end
-                bgezal: begin
-                    `simpleBranch
-                    `simpleLink
-                    cmpCtrl = `cmpGreaterThanOrEqualToZero;
-                end
-                bltz: begin
-                    `simpleBranch
-                    cmpCtrl = `cmpLessThanZero;
-                end
-                bgez: begin
-                    `simpleBranch
-                    cmpCtrl = `cmpGreaterThanOrEqualToZero;
-                end
-
-                default: begin
-                    generateException = `ctrlUnknownInstruction;
-                end
-            endcase
-        end
-        
         R: begin
             case(funct)
                 addu: begin
@@ -402,11 +362,7 @@ always_comb begin
                 end
 
                 syscall: begin
-                    generateException = `ctrlSyscall;
-                end
-
-                _break: begin
-                    generateException = `ctrlBreak;
+                    bye = 1;
                 end
 
                 mult: begin
@@ -566,6 +522,10 @@ always_comb begin
             cmpCtrl = `cmpGreaterThanZero;
         end 
 
+        bltz_bgez: begin
+            `simpleBranch
+            cmpCtrl = rti == 1 ? `cmpGreaterThanOrEqualToZero : `cmpLessThanZero;
+        end
 
         lui: begin
             regRead1 = rsi;
@@ -580,7 +540,8 @@ always_comb begin
             absJump = 1;
             absJumpLoc = `absJumpImmediate;
             immediate = bigImm;
-            `simpleLink
+            grfWriteSource = `grfWritePC;
+            destinationRegister = 31;
         end
 
         j: begin

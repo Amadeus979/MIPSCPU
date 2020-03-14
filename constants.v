@@ -63,8 +63,6 @@
 `define ctrlNoException 0
 `define ctrlUnknownInstruction 1
 `define ctrlERET 2
-`define ctrlSyscall 3
-`define ctrlBreak 4
 
 `define causeInt 0
 `define causeERET 16
@@ -72,5 +70,3 @@
 `define causeAdES 5
 `define causeRI 10
 `define causeOv 12
-`define causeSyscall 8
-`define causeBreak 9

@@ -8,17 +8,8 @@ module GeneralRegisterFile(
            input [31:0] writeData,
            input clk,
            input reset,
-           input [31:0] debugPC,
-    output [31:0] debug_wb_pc,
-    output [3:0] debug_wb_rf_wen,
-    output [4:0] debug_wb_rf_wnum,
-    output [31:0] debug_wb_rf_wdata
+           input [31:0] debugPC
        );
-
-assign debug_wb_pc = debugPC;
-assign debug_wb_rf_wen = writeAddress != 0;
-assign debug_wb_rf_wnum = writeAddress;
-assign debug_wb_rf_wdata = writeData;
 
 reg [31:0] registers [31:0];
 
@@ -41,6 +32,7 @@ always @(posedge clk) begin
 `else
             $display("%d@%h: $%d <= %h", $time, debugPC, writeAddress, writeData);
 `endif
+
             registers[writeAddress] <= writeData;
         end
     end

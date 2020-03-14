@@ -14,7 +14,6 @@ module CP0(
            input isException,
            input [4:0] exceptionCause,
            input [31:0] exceptionPC,
-           input [31:0] exceptionBadVAddr,
 
            output reg jump,
            output reg [31:0] jumpAddress,
@@ -23,13 +22,11 @@ module CP0(
            input [15:10] externalInterrupt
        );
 
-wire [31:0] exceptionHandler = 32'hBFC00380;
+wire [31:0] exceptionHandler = 32'h00004180;
 
 reg [31:0] registers [15:0];
 
 `define CauseNumber 13
-`define CompareNumber 11
-`define CountNumber 9
 
 assign readData = registers[number];
 
@@ -38,14 +35,11 @@ assign readData = registers[number];
 `define SR registers[12]
 `define EXL `SR[1]
 `define IE `SR[0]
-`define IM `SR[15:8]
+`define IM `SR[15:10]
 `define Cause registers[13]
 `define BD `Cause[31]
-`define IP `Cause[15:8]
+`define IP `Cause[15:10]
 `define ExcCode `Cause[6:2]
-`define BadVAddr registers[8]
-`define Count registers[`CountNumber]
-`define Compare registers[`CompareNumber]
 
 assign BDReg = `BD;
 wire EXLReg = `EXL;
@@ -56,12 +50,17 @@ always @(*) begin
     jump = 0;
     jumpAddress = 'bx;
     if (isException) begin
-        jump = 1;
-        if (exceptionCause == `causeERET) begin
-            jumpAddress = `EPC;
+        if (`EXL) begin
+            if (exceptionCause == `causeERET) begin
+                jump = 1;
+                jumpAddress = `EPC;
+            end
         end
-        else if (exceptionCause != `causeERET) begin
-            jumpAddress = exceptionHandler;
+        else begin
+            if (exceptionCause != `causeERET) begin
+                jump = 1;
+                jumpAddress = exceptionHandler;
+            end
         end
     end
 end
@@ -72,31 +71,13 @@ initial begin
     end
 end
 
-reg timerInterrupt, clearTimerInterrupt;
-wire [15:8] interruptSource = {timerInterrupt, externalInterrupt[14:10], `Cause[9:8]};
+wire [15:10] interruptSource = externalInterrupt;
 wire interruptEnabled = `IE && !`EXL && !hasExceptionInPipeline;
-wire [15:8] unmaskedInterrupt = interruptEnabled ? (interruptSource & `IM) : 0;
+wire [15:10] unmaskedInterrupt = interruptEnabled ? (interruptSource & `IM) : 0;
 wire hasInterrupt = | unmaskedInterrupt;
 
 reg pendingInterrupt;
 assign interruptNow = hasInterrupt;
-
-
-always @(posedge clk) begin
-    if (reset) begin
-        timerInterrupt <= 0;
-    end
-    else begin
-        if (clearTimerInterrupt) begin
-            timerInterrupt <= 0;
-        end
-        else begin
-            if (`Count == `Compare && `Compare != 32'b0) begin
-                timerInterrupt <= 1;
-            end
-        end
-    end
-end
 
 always @(posedge clk) begin
     if (reset) begin
@@ -107,13 +88,8 @@ always @(posedge clk) begin
         `IM <= 6'b111111;
         // interruptSource <= 0;
         pendingInterrupt <= 0;
-        clearTimerInterrupt <= 0;
     end
     else begin
-        if (isException || !writeEnable || number != `CountNumber) begin
-            `Count <= `Count + 1;
-        end
-
         // interruptSource <= externalInterrupt;
         if (hasInterrupt) begin
             pendingInterrupt <= 1;
@@ -131,7 +107,6 @@ always @(posedge clk) begin
             end
             else begin
                 if (exceptionCause != `causeERET) begin
-                    `BadVAddr <= exceptionBadVAddr;
                     `BD <= isBD;
                     `ExcCode <= exceptionCause;
                     if (isBD) begin
@@ -154,14 +129,7 @@ always @(posedge clk) begin
                     registers[number] <= writeData;
                 end
             end
-
             `Cause[15:10] <= externalInterrupt[15:10];
-
-            if (writeEnable && number == `CompareNumber) begin
-                clearTimerInterrupt <= 1;
-            end else if (clearTimerInterrupt) begin
-                clearTimerInterrupt <= 0;
-            end
         end
     end
 end

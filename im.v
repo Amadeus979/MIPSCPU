@@ -9,54 +9,34 @@ module InstructionMemory(
            output [31:0] outputPC,
            output [31:0] instruction,
            output reg exception,
-        output [31:0] inst_sram_addr,
-        input [31:0] inst_sram_rdata,
            output bubble
        );
 
 
-// reg [31:0] memory [4095:0];
+reg [31:0] memory [4095:0];
 wire isHanging;
 
+initial begin
+    $readmemh("code.txt", memory);
+    $readmemh("code_handler.txt", memory, 1120, 2047);
+end
 
-// wire [31:0] realAddress = pc - 32'h3000;
+wire [31:0] realAddress = pc - 32'h3000;
 reg [31:0] pc;
 reg hangState;
 assign outputPC = hangState ? 0 : pc;
 assign bubble = hangState;
-// assign instruction = isHanging ? 0 : memory[realAddress[13:2]];
-assign instruction = isHanging ? 0 : inst_sram_rdata;
+assign instruction = isHanging ? 0 : memory[realAddress[13:2]];
 assign isHanging = hang || hangState;
 
 always @(*) begin
     exception = 0;
     if (!hangState) begin
-        if (pc[1:0] != 0) begin
+        if (pc >= 32'h5000 || pc < 32'h3000) begin
             exception = 1;
         end
-    end
-end
-
-logic [31:0] nextPC;
-assign inst_sram_addr = nextPC;
-
-always_comb begin
-    if (reset) begin
-        nextPC  = 32'hBFC00000;
-    end else begin
-        if (pcStall) begin
-            nextPC = pc;
-        end
-        else if (absJump) begin
-            nextPC = absJumpAddress;
-        end
-        else begin
-            if (hang) begin
-                nextPC = pc;
-            end
-            if (!isHanging) begin
-                nextPC = pc + 4;
-            end
+        if (pc[1:0] != 0) begin
+            exception = 1;
         end
     end
 end
@@ -67,6 +47,7 @@ always @(posedge clk) begin
 `endif
     if (reset)
     begin
+        pc <= 32'h3000;
         hangState <= 0;
     end
     else begin
@@ -74,14 +55,17 @@ always @(posedge clk) begin
         end
         else if (absJump) begin
             hangState <= 0;
+            pc <= absJumpAddress;
         end
         else begin
             if (hang) begin
                 hangState <= 1;
             end
+            if (!isHanging) begin
+                pc <= pc + 4;
+            end
         end
     end
-    pc <= nextPC;
 end
 
 always @(*) begin
